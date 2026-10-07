@@ -1,6 +1,7 @@
 """DATA 폴더의 PDF를 검색해서 답변하는 간단한 RAG 챗봇입니다."""
 
 from pathlib import Path
+import os
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -20,6 +21,22 @@ from validation import run_validation
 load_dotenv()
 
 DATA_DIR = Path(__file__).parent / "DATA"
+
+
+def get_openai_api_key() -> str | None:
+    """Streamlit Cloud Secrets 또는 로컬 .env에서 API 키를 읽습니다."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key:
+        return api_key
+
+    # Streamlit Cloud에서는 앱 설정의 Secrets가 이 위치로 제공됩니다.
+    try:
+        secret_key = st.secrets.get("OPENAI_API_KEY")
+    except Exception:
+        # 로컬에 secrets.toml이 없어도 앱이 실행되도록 처리합니다.
+        secret_key = None
+
+    return str(secret_key) if secret_key else None
 
 
 class DirectOpenAIEmbeddings(Embeddings):
@@ -152,11 +169,12 @@ def main() -> None:
     st.write("DATA 폴더의 문서만 근거로 답변합니다.")
 
     if not st.session_state.get("api_key_ready"):
-        import os
-
-        if not os.getenv("OPENAI_API_KEY"):
-            st.error(".env 파일에 OPENAI_API_KEY를 입력한 뒤 앱을 다시 실행해 주세요.")
+        api_key = get_openai_api_key()
+        if not api_key:
+            st.error("로컬에서는 .env에, Streamlit Cloud에서는 App settings > Secrets에 OPENAI_API_KEY를 설정해 주세요.")
             st.stop()
+        # OpenAI 클라이언트들이 같은 키를 사용할 수 있도록 환경변수로 설정합니다.
+        os.environ["OPENAI_API_KEY"] = api_key
         st.session_state.api_key_ready = True
 
     try:
